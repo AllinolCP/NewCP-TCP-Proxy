@@ -1,0 +1,4 @@
+PyNaCl==1.4.0
+nacl==0.0.0
+pycryptodome==3.9.8
+loguru==0.5.1
