@@ -47,6 +47,8 @@ class Spheniscidae:
                 self.proxy_writer.close()
             except LimitOverrunError:
                 self.proxy_writer.close()
+            except GeneratorExit:
+                pass
             except BaseException as e:
                 self.logger.exception(e.__traceback__)
         
