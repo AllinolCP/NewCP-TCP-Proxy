@@ -29,10 +29,7 @@ class Spheniscidae:
         self.server = server
         self.logger = server.logger
         
-    async def connect_to_server(self):
-        self.proxy_reader, self.proxy_writer = await asyncio.open_connection(
-                self.server.config.server, self.server.config.port
-        )
+    async def listen_server(self):
         while not self.proxy_writer.is_closing():
             try:
                 data = (await self.proxy_reader.readuntil(
@@ -75,17 +72,16 @@ class Spheniscidae:
                 self.logger.exception(e.__traceback__)
         
     async def run(self):
-        asyncio.create_task(self.connect_to_server())
-        asyncio.create_task(self.client_connected())
+        self.proxy_reader, self.proxy_writer = await asyncio.open_connection(
+            self.server.config.server, self.server.config.port
+        )
+        asyncio.ensure_future(self.listen_server())
+        asyncio.ensure_future(self.client_connected())
      
     def intercept_client(self, data):
         if "<body action='encryption' r='0'>" in data:
             self.client_key = re.search(r"<key>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/key>", data).group(1)
-            return self.send_server(f"\
-                                    <msg t='sys'><body action='encryption' r='0'>\
-                                    <key><![CDATA[{self.proxy_pub_key_b64.decode()}]]></key>\
-                                    </body></msg>\
-                                    \x00")
+            return self.send_server(f"<msg t='sys'><body action='encryption' r='0'><key><![CDATA[{self.proxy_pub_key_b64.decode()}]]></key></body></msg>\x00")
             
         if self.encrypt and not data.startswith('%xt') or not data.startswith('<'):
             data = self.AES.decrypt(data)
@@ -105,19 +101,19 @@ class Spheniscidae:
         self.AES = AESCipher(self.aes_key)
         self.send_client_key()
     
+    def decode_base64(self, key:str) -> bytes: 
+        return base64.b64decode(key.encode('utf-8'))
+
     def send_client_key(self):
-        client_pub = PublicKey(self.decode_public_key(self.client_key))
+        client_pub = PublicKey(self.decode_base64(self.client_key))
         nonce = nacl.utils.random(Box.NONCE_SIZE)
         box = Box(self.key, client_pub)
         message = base64.b64encode(box.encrypt(self.aes_key, nonce))
         self.send_xt_client('secondlayer', 'encryption', self.proxy_pub_key_b64.decode(), message.decode())
 
-    def decode_public_key(self, key:str) -> bytes: 
-        return base64.b64decode(key.encode('utf-8'))
-
     def decrypt_nacl_key(self, message, public_key): 
-        l = self.base64(message)
-        pub = PublicKey(self.base64(public_key))
+        l = self.decode_base64(message)
+        pub = PublicKey(self.decode_base64(public_key))
         box = Box(self.key, pub)
         return box.decrypt(l)
     
