@@ -29,7 +29,7 @@ class Spheniscidae:
         self.server = server
         self.logger = server.logger
         
-    async def client_connected(self):
+    async def connect_to_server(self):
         self.proxy_reader, self.proxy_writer = await asyncio.open_connection(
                 self.server.config.server, self.server.config.port
         )
@@ -53,26 +53,26 @@ class Spheniscidae:
             except BaseException as e:
                 self.logger.exception(e.__traceback__)
         
-    async def create_server(self):
+    async def client_connected(self):
         while not self.client_writer.is_closing():
-        try:
-            data = await self.__reader.readuntil(
-                separator=Spheniscidae.Delimiter)
-            if data:
-                self.intercept_client(data.decode())
-            else:
+            try:
+                data = await self.__reader.readuntil(
+                    separator=Spheniscidae.Delimiter)
+                if data:
+                    self.intercept_client(data.decode())
+                else:
+                    self.client_writer.close()
+                await self.client_writer.drain()
+            except IncompleteReadError:
                 self.client_writer.close()
-            await self.client_writer.drain()
-        except IncompleteReadError:
-            self.client_writer.close()
-        except CancelledError:
-            self.client_writer.close()
-        except ConnectionResetError:
-            self.client_writer.close()
-        except LimitOverrunError:
-            self.client_writer.close()
-        except BaseException as e:
-            self.logger.exception(e.__traceback__)
+            except CancelledError:
+                self.client_writer.close()
+            except ConnectionResetError:
+                self.client_writer.close()
+            except LimitOverrunError:
+                self.client_writer.close()
+            except BaseException as e:
+                self.logger.exception(e.__traceback__)
         
     async def run(self):
         asyncio.create_task(self.connect_to_server())
